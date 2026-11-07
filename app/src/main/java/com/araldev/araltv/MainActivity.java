@@ -31,6 +31,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -68,7 +69,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private ProgressBar progress;
     private View errorOverlay;
-    private TextView errTitle, errSub;
+    private TextView errTitle, errSub, errMono;
     private Button btnRetry, btnChangePanel;
 
     private String webMode = "dark";      // دارک/لایت سایت
@@ -85,12 +86,10 @@ public class MainActivity extends Activity {
 
     private long lastBackPress = 0;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private boolean restarting = false;
 
-    /** اگر اپ ۸ ثانیه زنده ماند، اجرا «سالم» حساب می‌شود (BootGuard) */
-    private final Runnable healthyRunnable = new Runnable() {
-        @Override public void run() { BootGuard.markHealthy(MainActivity.this); }
-    };
+    // Crash of the web render — loop prevention
+    private int rendererCrashes = 0;
+    private long lastRendererCrashAt = 0;
 
     // ---------- چرخهٔ حیات ----------
 
@@ -98,63 +97,43 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         CrashGuard.install(getApplicationContext());
-        BootGuard.markStart(this);
-        try {
-            initScreen();
-        } catch (Throwable t) {
-            // هر خطای راه‌اندازی: ثبت در last_crash.txt و رفتن به صفحهٔ تنظیم (نه کرش)
-            CrashGuard.record(this, t);
-            fallbackToSetup();
-        }
-    }
-
-    private void initScreen() {
-        try { Ui.init(getApplicationContext()); } catch (Throwable ignored) {}
+        Ui.init(getApplicationContext());
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         panelUrl = prefs.getString(KEY_URL, null);
         if (panelUrl == null || panelUrl.trim().isEmpty()) {
-            BootGuard.markHealthy(this);
             startActivity(new Intent(this, SetupActivity.class));
             finish();
             return;
         }
-        panelUrl = panelUrl.trim();
-        try {
-            Uri pu = Uri.parse(panelUrl);
-            if (pu.getHost() != null) panelHost = pu.getHost().toLowerCase(Locale.ROOT);
-        } catch (Throwable ignored) {}
+        Uri pu = Uri.parse(panelUrl);
+        if (pu.getHost() != null) panelHost = pu.getHost().toLowerCase(Locale.ROOT);
 
         // تم آخرین بار → پیش از بارگذاری صفحه، نوارها هماهنگ باشند (بدون فلش سفید)
         String savedTheme = prefs.getString(KEY_THEME, "dark");
         webMode = "light".equals(savedTheme) ? "light" : "dark";
         webBg = "light".equals(webMode) ? Ui.C_BG_L : Ui.C_BG;
+        applyThemeChrome(webBg, webMode);
 
-        setContentView(R.layout.activity_main);
-        bindViews();
+        try {
+            setContentView(R.layout.activity_main);
+            bindViews();
+            styleBrand();
+        } catch (Throwable t) {
+            // If the layout failed on this device → build the same frame with plain widgets
+            buildFallbackUi();
+        }
 
-        // بخش‌های ظاهری: خطایشان هرگز نباید اپ را ببندد
-        try { styleBrand(); } catch (Throwable t) { CrashGuard.record(this, t); }
-        try { applyThemeChrome(webBg, webMode); } catch (Throwable t) { CrashGuard.record(this, t); }
-
-        setupWebView();
-
-        try { handleIntent(getIntent()); } catch (Throwable t) { CrashGuard.record(this, t); }
-        web.loadUrl(panelUrl);
+        try {
+            setupWebView();
+            handleIntent(getIntent());
+            web.loadUrl(panelUrl);
+        } catch (Throwable t) {
+            // Even the WebView failed → text screen with usable buttons
+            showFatalError();
+        }
 
         if (pendingPath != null) toast(getString(R.string.opening_video));
-
-        handler.postDelayed(healthyRunnable, 8000);
-    }
-
-    /** وقتی راه‌اندازی شکست بخورد: صفحهٔ تنظیم آدرس (با پیام) به‌جای کرش */
-    private void fallbackToSetup() {
-        try {
-            Intent i = new Intent(this, SetupActivity.class);
-            i.putExtra(SetupActivity.EXTRA_SAFE, true);
-            startActivity(i);
-        } catch (Throwable ignored) {}
-        finish();
     }
 
     @Override
@@ -173,23 +152,17 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         if (web != null) web.onPause();
-        try { CookieManager.getInstance().flush(); } catch (Throwable ignored) {}
+        CookieManager.getInstance().flush();
     }
 
     @Override
     protected void onDestroy() {
-        handler.removeCallbacks(healthyRunnable);
-        // خروج عادی کاربر = اجرای سالم (ولی نه در بازآغاز بعد از کرش رندر)
-        if (isFinishing() && !restarting) BootGuard.markHealthy(this);
-        try {
-            if (web != null) {
-                web.loadUrl("about:blank");
-                android.view.ViewParent parent = web.getParent();
-                if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(web);
-                web.destroy();
-            }
-        } catch (Throwable ignored) {}
-        web = null;
+        if (web != null) {
+            web.loadUrl("about:blank");
+            ((ViewGroup) web.getParent()).removeView(web);
+            web.destroy();
+            web = null;
+        }
         super.onDestroy();
     }
 
@@ -218,17 +191,223 @@ public class MainActivity extends Activity {
         errSub = findViewById(R.id.errSub);
         btnRetry = findViewById(R.id.btnRetry);
         btnChangePanel = findViewById(R.id.btnChangePanel);
+        errMono = findViewById(R.id.errMono);
 
+        wireErrorButtons();
+    }
+
+    /** Error-page buttons — for both the XML path and the programmatic frame */
+    private void wireErrorButtons() {
+        if (btnRetry == null || btnChangePanel == null) return;
         btnRetry.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                errorOverlay.setVisibility(View.GONE);
+                if (errorOverlay != null) errorOverlay.setVisibility(View.GONE);
                 pageReady = false;
-                web.reload();
+                if (web != null) {
+                    web.reload();
+                } else {
+                    relaunchApp(); // no webview → let the whole app restart cleanly
+                }
             }
         });
         btnChangePanel.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { gotoSetup(); }
         });
+    }
+
+    /** Clean full-app restart from splash */
+    private void relaunchApp() {
+        try {
+            Intent i = new Intent(MainActivity.this, SplashActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(i);
+            finish();
+        } catch (Throwable ignored) {}
+    }
+
+    /* =====================================================================
+       Frame without XML — same structure as activity_main, plain widgets:
+       full-screen WebView + progress bar + error page
+       ===================================================================== */
+    private void buildFallbackUi() {
+        try {
+            FrameLayout root = new FrameLayout(this);
+            root.setBackgroundColor(webBg);
+
+            web = new WebView(this);
+            root.addView(web, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+            progress.setMax(100);
+            progress.setVisibility(View.GONE);
+            root.addView(progress, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 2), android.view.Gravity.TOP));
+
+            errorOverlay = new FrameLayout(this);
+            FrameLayout overlayF = (FrameLayout) errorOverlay;
+            overlayF.setBackgroundColor(webBg);
+            overlayF.setVisibility(View.GONE);
+            overlayF.setClickable(true);
+            overlayF.setFocusable(true);
+
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            card.setPadding(Ui.dp(this, 28), Ui.dp(this, 64), Ui.dp(this, 28), Ui.dp(this, 48));
+
+            errTitle = new TextView(this);
+            errTitle.setText(getString(R.string.error_title));
+            errTitle.setTextColor(Ui.C_TEXT);
+            errTitle.setTextSize(16);
+            errTitle.setGravity(android.view.Gravity.CENTER);
+            errTitle.setPadding(0, 0, 0, Ui.dp(this, 6));
+
+            errSub = new TextView(this);
+            errSub.setText(getString(R.string.error_sub));
+            errSub.setTextColor(Ui.C_MUTED);
+            errSub.setTextSize(13);
+            errSub.setGravity(android.view.Gravity.CENTER);
+
+            btnRetry = new Button(this);
+            btnRetry.setText(R.string.error_retry);
+            btnRetry.setTextColor(Ui.C_INK);
+
+            btnChangePanel = new Button(this);
+            btnChangePanel.setText(R.string.error_change);
+            btnChangePanel.setTextColor(Ui.C_TEXT2);
+
+            errMono = new TextView(this);
+            errMono.setText("ARAL TV · ANDROID");
+            errMono.setTextColor(Ui.C_DIM);
+            errMono.setTextSize(10.5f);
+            errMono.setPadding(0, Ui.dp(this, 26), 0, 0);
+
+            card.addView(errTitle);
+            card.addView(errSub);
+            card.addView(btnRetry, new LinearLayout.LayoutParams(
+                    Ui.dp(this, 230), Ui.dp(this, 50)));
+            card.addView(btnChangePanel, new LinearLayout.LayoutParams(
+                    Ui.dp(this, 230), Ui.dp(this, 46)));
+            card.addView(errMono);
+            overlayF.addView(card, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.CENTER));
+
+            root.addView(overlayF, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            setContentView(root);
+            wireErrorButtons();
+            themeErrorOverlay();
+        } catch (Throwable t) {
+            // even the webview frame failed → final text-only screen
+            web = null;
+            buildTextOnlyUi();
+        }
+    }
+
+    /** Last safety layer: no webview — text + three working buttons */
+    private void buildTextOnlyUi() {
+        try {
+            errorOverlay = null;
+            LinearLayout box = new LinearLayout(this);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setGravity(android.view.Gravity.CENTER);
+            box.setPadding(Ui.dp(this, 28), 0, Ui.dp(this, 28), 0);
+            box.setBackgroundColor(Ui.C_BG);
+
+            errTitle = new TextView(this);
+            errTitle.setText(getString(R.string.error_renderer_title));
+            errTitle.setTextColor(Ui.C_TEXT);
+            errTitle.setTextSize(16);
+            errTitle.setGravity(android.view.Gravity.CENTER);
+            errTitle.setPadding(0, 0, 0, Ui.dp(this, 8));
+
+            errSub = new TextView(this);
+            errSub.setText(getString(R.string.error_sub));
+            errSub.setTextColor(Ui.C_MUTED);
+            errSub.setTextSize(13);
+            errSub.setGravity(android.view.Gravity.CENTER);
+            errSub.setPadding(0, 0, 0, Ui.dp(this, 24));
+
+            btnRetry = new Button(this);
+            btnRetry.setText(R.string.error_retry);
+            btnRetry.setTextColor(Ui.C_INK);
+
+            btnChangePanel = new Button(this);
+            btnChangePanel.setText(R.string.error_change);
+            btnChangePanel.setTextColor(Ui.C_TEXT2);
+
+            Button btnBrowser = new Button(this);
+            btnBrowser.setText(R.string.error_open_browser);
+            btnBrowser.setTextColor(Ui.C_TEXT2);
+
+            errMono = new TextView(this);
+            errMono.setText("ARAL TV · ANDROID");
+            errMono.setTextColor(Ui.C_DIM);
+            errMono.setTextSize(10.5f);
+            errMono.setPadding(0, Ui.dp(this, 26), 0, 0);
+
+            btnRetry.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { relaunchApp(); }
+            });
+            btnChangePanel.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { gotoSetup(); }
+            });
+            btnBrowser.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { openExternal(panelUrl); }
+            });
+
+            box.addView(errTitle);
+            box.addView(errSub);
+            box.addView(btnRetry, new LinearLayout.LayoutParams(
+                    Ui.dp(this, 230), Ui.dp(this, 50)));
+            box.addView(btnChangePanel, new LinearLayout.LayoutParams(
+                    Ui.dp(this, 230), Ui.dp(this, 46)));
+            box.addView(btnBrowser, new LinearLayout.LayoutParams(
+                    Ui.dp(this, 230), Ui.dp(this, 46)));
+            box.addView(errMono);
+            setContentView(box);
+        } catch (Throwable ignored) {}
+    }
+
+    /** Final error screen — no crash, with real solutions */
+    private void showFatalError() {
+        try {
+            if (progress != null) progress.setVisibility(View.GONE);
+            if (errorOverlay != null && errTitle != null) {
+                errorOverlay.setVisibility(View.VISIBLE);
+                errTitle.setText(R.string.error_renderer_title);
+                if (errSub != null) errSub.setText(getString(R.string.error_sub));
+                return;
+            }
+            buildTextOnlyUi();
+        } catch (Throwable ignored) {}
+    }
+
+    /** web render crash — first: clean restart; repeat under 30s: stop and show solutions */
+    private void onRendererCrash() {
+        try {
+            if (web != null) {
+                try { ((ViewGroup) web.getParent()).removeView(web); } catch (Throwable ignored) {}
+                try { web.destroy(); } catch (Throwable ignored) {}
+                web = null;
+            }
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastRendererCrashAt > 30000) rendererCrashes = 0;
+            lastRendererCrashAt = now;
+            rendererCrashes++;
+
+            if (rendererCrashes <= 1) {
+                relaunchApp();
+            } else {
+                // do not restart again (no infinite loop) — offer solutions instead
+                showFatalError();
+            }
+        } catch (Throwable ignored) {
+            try { finish(); } catch (Throwable ignored2) {}
+        }
     }
 
     /** برند صفحهٔ خطا با فونت‌ها و رنگ‌های خود سایت */
@@ -237,7 +416,7 @@ public class MainActivity extends Activity {
 
         TextView brand = findViewById(R.id.errBrand);
         SpannableString s = SpannableString.valueOf("Aral TV");
-        s.setSpan(new ForegroundColorSpan(Ui.C_FIRE), 5, 8, 0); // " TV" نارنجی مثل سایت
+        s.setSpan(new ForegroundColorSpan(Ui.C_FIRE), 4, 7, 0); // " TV" نارنجی مثل سایت
         brand.setText(s);
         brand.setLetterSpacing(0.14f);
         if (Ui.fontDisplay != null) brand.setTypeface(Ui.fontDisplay);
@@ -267,19 +446,15 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         // حذف نشانگر «wv» از UA برای سازگاری بهتر (از جمله ورود گوگل)
-        try {
-            String ua = s.getUserAgentString();
-            if (ua != null) s.setUserAgentString(ua.replace("; wv", "").trim());
-        } catch (Throwable ignored) {}
+        String ua = s.getUserAgentString();
+        if (ua != null) s.setUserAgentString(ua.replace("; wv", "").trim());
 
         web.setBackgroundColor(webBg);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
-        try {
-            CookieManager cm = CookieManager.getInstance();
-            cm.setAcceptCookie(true);
-            cm.setAcceptThirdPartyCookies(web, true);
-        } catch (Throwable ignored) {}
+        CookieManager cm = CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        cm.setAcceptThirdPartyCookies(web, true);
 
         web.addJavascriptInterface(new JsBridge(this), "AralBridge");
 
@@ -300,10 +475,9 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 pageReady = true;
-                BootGuard.markHealthy(MainActivity.this); // صفحه بارگذاری شد → اجرا سالم است
                 if (errorOverlay != null) errorOverlay.setVisibility(View.GONE);
                 injectBridge();
-                pushPendingToPage();
+                try { pushPendingToPage(); } catch (Throwable ignored) {}
             }
 
             @Override
@@ -320,16 +494,12 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
-                // رندرر وب‌ویو مرد (کرش یا کمبود حافظه). اگر false برگردانیم سیستم کل اپ را
-                // می‌کُشد؛ پس همیشه true و بازآغاز تمیز اپ (BootGuard جلوی حلقه را می‌گیرد).
-                restarting = true;
-                try {
-                    Intent i = new Intent(MainActivity.this, SplashActivity.class);
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(i);
-                } catch (Throwable ignored) {}
-                finish();
-                return true;
+                // کرش رندر وب‌ویو — با محافظ ضد حلقه
+                if (detail != null && detail.didCrash()) {
+                    onRendererCrash();
+                    return true;
+                }
+                return false;
             }
         });
 
@@ -425,7 +595,6 @@ public class MainActivity extends Activity {
     // ---------- پل ----------
 
     private void injectBridge() {
-        if (web == null) return;
         try {
             InputStream is = getAssets().open("bridge.js");
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -440,7 +609,7 @@ public class MainActivity extends Activity {
 
     /** مسیر در انتظار را به صفحه می‌سپارد؛ bridge.js بعد از ورود آن را با navigate() خود سایت باز می‌کند */
     private void pushPendingToPage() {
-        if (web == null || pendingPath == null || !pageReady) return;
+        if (pendingPath == null || !pageReady) return;
         final String p = pendingPath;
         pendingPath = null;
         web.evaluateJavascript("window.__aralPending=" + jsString(p) + ";undefined", null);
@@ -470,14 +639,12 @@ public class MainActivity extends Activity {
         handler.post(new Runnable() {
             @Override
             public void run() {
-                try {
-                    int color = parseColor(colorHex, "light".equals(mode) ? Ui.C_BG_L : Ui.C_BG);
-                    webMode = "light".equals(mode) ? "light" : "dark";
-                    webBg = color;
-                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                            .putString(KEY_THEME, webMode).apply();
-                    applyThemeChrome(color, webMode);
-                } catch (Throwable ignored) {}
+                int color = parseColor(colorHex, "light".equals(mode) ? Ui.C_BG_L : Ui.C_BG);
+                webMode = "light".equals(mode) ? "light" : "dark";
+                webBg = color;
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putString(KEY_THEME, webMode).apply();
+                applyThemeChrome(color, webMode);
             }
         });
     }
@@ -494,29 +661,33 @@ public class MainActivity extends Activity {
     // ---------- رنگ‌های سیستم — همیشه هماهنگ با تم سایت ----------
 
     private void applyThemeChrome(int bg, String mode) {
-        boolean light = "light".equals(mode);
-        Window w = getWindow();
+        try {
+            boolean light = "light".equals(mode);
+            Window w = getWindow();
 
-        w.setStatusBarColor(bg);
-        w.setNavigationBarColor(bg);
-        if (web != null) web.setBackgroundColor(bg);
+            w.setStatusBarColor(bg);
+            w.setNavigationBarColor(bg);
+            if (web != null) web.setBackgroundColor(bg);
 
-        int flags = w.getDecorView().getSystemUiVisibility();
-        if (light) {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-        } else {
-            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            if (Build.VERSION.SDK_INT >= 26) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            int flags = w.getDecorView().getSystemUiVisibility();
+            if (light) {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            } else {
+                flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (Build.VERSION.SDK_INT >= 26) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
+            w.getDecorView().setSystemUiVisibility(flags);
+
+            // نوار پیشرفت و صفحهٔ خطا هم با تم سایت
+            int fire = light ? Ui.C_FIRE_L : Ui.C_FIRE;
+            if (progress != null) {
+                progress.setProgressTintList(ColorStateList.valueOf(fire));
+            }
+            themeErrorOverlay();
+        } catch (Throwable ignored) {
+            // رنگ نوارها هرگز نباید اپ را ببندد
         }
-        w.getDecorView().setSystemUiVisibility(flags);
-
-        // نوار پیشرفت و صفحهٔ خطا هم با تم سایت
-        int fire = light ? Ui.C_FIRE_L : Ui.C_FIRE;
-        if (progress != null) {
-            progress.setProgressTintList(ColorStateList.valueOf(fire));
-        }
-        themeErrorOverlay();
     }
 
     private void themeErrorOverlay() {
@@ -548,7 +719,7 @@ public class MainActivity extends Activity {
         ghost.addState(new int[0], Ui.cutDrawable(this, 0x00000000, border2, 10, 1));
         btnChangePanel.setBackground(ghost);
         btnChangePanel.setTextColor(light ? 0xFF335146 : Ui.C_TEXT2);
-        findViewById(R.id.errMono).setVisibility(View.VISIBLE);
+        if (errMono != null) errMono.setVisibility(View.VISIBLE);
     }
 
     // ---------- اینتنت‌ها (اشتراک لینک یوتیوب/آپارات) ----------
@@ -630,14 +801,18 @@ public class MainActivity extends Activity {
     // ---------- تمام‌صفحه (پلیر) ----------
 
     private void enterFullscreen() {
-        progress.setVisibility(View.GONE);
-        fullscreenContainer = new FrameLayout(this);
-        fullscreenContainer.setBackgroundColor(Color.BLACK);
-        fullscreenContainer.addView(customView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        ((ViewGroup) getWindow().getDecorView()).addView(fullscreenContainer, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        try {
+            progress.setVisibility(View.GONE);
+            fullscreenContainer = new FrameLayout(this);
+            fullscreenContainer.setBackgroundColor(Color.BLACK);
+            fullscreenContainer.addView(customView, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            ((ViewGroup) getWindow().getDecorView()).addView(fullscreenContainer, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        } catch (Throwable ignored) {
+            // روی بعضی رام‌ها چرخش قفل است — ویدیو باید در هر حال پخش شود
+        }
         hideSystemBars();
     }
 
@@ -665,33 +840,37 @@ public class MainActivity extends Activity {
     }
 
     private void hideSystemBars() {
-        Window w = getWindow();
-        if (Build.VERSION.SDK_INT >= 30) {
-            android.view.WindowInsetsController c = w.getInsetsController();
-            if (c != null) {
-                c.hide(android.view.WindowInsets.Type.statusBars() | android.view.WindowInsets.Type.navigationBars());
-                c.setSystemBarsBehavior(
-                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        try {
+            Window w = getWindow();
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.view.WindowInsetsController c = w.getInsetsController();
+                if (c != null) {
+                    c.hide(android.view.WindowInsets.Type.statusBars() | android.view.WindowInsets.Type.navigationBars());
+                    c.setSystemBarsBehavior(
+                            android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                }
+            } else {
+                w.getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
             }
-        } else {
-            w.getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                            | View.SYSTEM_UI_FLAG_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        }
+        } catch (Throwable ignored) {}
     }
 
     private void showSystemBars() {
-        Window w = getWindow();
-        if (Build.VERSION.SDK_INT >= 30) {
-            android.view.WindowInsetsController c = w.getInsetsController();
-            if (c != null) c.show(android.view.WindowInsets.Type.statusBars() | android.view.WindowInsets.Type.navigationBars());
-        } else {
-            w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-        }
+        try {
+            Window w = getWindow();
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.view.WindowInsetsController c = w.getInsetsController();
+                if (c != null) c.show(android.view.WindowInsets.Type.statusBars() | android.view.WindowInsets.Type.navigationBars());
+            } else {
+                w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            }
+        } catch (Throwable ignored) {}
         applyThemeChrome(webBg, webMode);
     }
 
@@ -706,7 +885,7 @@ public class MainActivity extends Activity {
                     android.os.Environment.DIRECTORY_DOWNLOADS, name);
             String cookies = CookieManager.getInstance().getCookie(url);
             if (cookies != null && !cookies.isEmpty()) req.addRequestHeader("Cookie", cookies);
-            if (ua == null || ua.isEmpty()) ua = web.getSettings().getUserAgentString();
+            if ((ua == null || ua.isEmpty()) && web != null) ua = web.getSettings().getUserAgentString();
             if (ua != null) req.addRequestHeader("User-Agent", ua);
             if (mime != null && mime.contains("/")) req.setMimeType(mime);
             android.app.DownloadManager dm = (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);

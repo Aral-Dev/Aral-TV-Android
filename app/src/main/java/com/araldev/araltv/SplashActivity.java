@@ -33,7 +33,7 @@ public class SplashActivity extends Activity {
 
             TextView title = findViewById(R.id.splashTitle);
             SpannableString s = SpannableString.valueOf("Aral TV");
-            s.setSpan(new ForegroundColorSpan(Ui.C_FIRE), 5, 8, 0); // " TV" نارنجی
+            s.setSpan(new ForegroundColorSpan(Ui.C_FIRE), 4, 7, 0); // " TV" نارنجی
             title.setText(s);
             title.setLetterSpacing(0.16f);
             if (Ui.fontDisplay != null) title.setTypeface(Ui.fontDisplay);
@@ -63,11 +63,6 @@ public class SplashActivity extends Activity {
             Intent i;
             if (url == null || url.trim().isEmpty()) {
                 i = new Intent(SplashActivity.this, SetupActivity.class);
-            } else if (BootGuard.tooManyFailures(SplashActivity.this)) {
-                // دو اجرای پیاپی بدون موفقیت → به‌جای کرش دوباره، صفحهٔ تنظیم را باز کن
-                BootGuard.markHealthy(SplashActivity.this);
-                i = new Intent(SplashActivity.this, SetupActivity.class);
-                i.putExtra(SetupActivity.EXTRA_SAFE, true);
             } else {
                 i = new Intent(SplashActivity.this, MainActivity.class);
             }

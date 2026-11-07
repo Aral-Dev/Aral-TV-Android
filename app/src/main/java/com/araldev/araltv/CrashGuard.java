@@ -1,7 +1,6 @@
 package com.araldev.araltv;
 
 import android.content.Context;
-import android.os.Build;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -43,11 +42,6 @@ public final class CrashGuard {
         } catch (Throwable ignored) {}
     }
 
-    /** ثبت خطای گرفته‌شده (بدون کرش) تا علتش در last_crash.txt بماند. */
-    public static void record(Context ctx, Throwable e) {
-        try { write(ctx.getApplicationContext(), Thread.currentThread(), e); } catch (Throwable ignored) {}
-    }
-
     /** گزارش کرش را در هر دو محل ممکن می‌نویسد (بیرونی برای دسترسی آسان‌تر). */
     private static void write(Context app, Thread t, Throwable e) {
         String stamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -57,8 +51,6 @@ public final class CrashGuard {
         String report = "Aral TV Android " + BuildConfigLike.VERSION
                 + "  |  " + stamp
                 + "  |  thread=" + t.getName()
-                + "\nDevice: " + Build.MANUFACTURER + " " + Build.MODEL
-                + "  |  Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")"
                 + "\n----------------------------------------\n"
                 + sw.toString()
                 + "\n";

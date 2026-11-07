@@ -222,7 +222,7 @@
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="18dp"
         android:letterSpacing="0.2"
-        android:text="ARAL TV · ANDROID · V1.7.0"
+        android:text="ARAL TV · ANDROID · V1.7.2"
         android:textColor="@color/dim"
         android:textSize="10.5sp" />
 </FrameLayout>

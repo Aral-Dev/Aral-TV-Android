@@ -26,11 +26,12 @@ import java.nio.charset.Charset;
  * زمینهٔ مشکی + لکه‌های fire/neon، کارتِ شیشه‌ای با گوشهٔ بریدهٔ ARAL،
  * تیتر Orbitron با « TV» نارنجی، دکمهٔ fire و فوتر مونو.
  * منطق مثل قبل: آدرس ورکر را می‌گیرد، /api/status را بررسی و ذخیره می‌کند.
+ *
+ * اصل تازه در ۱.۷.۲: این صفحه هرگز نباید باعث بسته شدن اپ شود —
+ * اگر لی‌اوت XML روی دستگاهی شکست بخورد، همین صفحه با ویجت‌های خالص
+ * فریم‌ورک ساخته می‌شود (بدون BlobsView، بدون فونت، بدون drawable).
  */
 public class SetupActivity extends Activity {
-
-    /** اگر true باشد یعنی اجرای قبلی اپ با خطا بسته شده است */
-    public static final String EXTRA_SAFE = "safe_mode";
 
     private EditText inputUrl;
     private Button btnConnect, btnSkip;
@@ -39,6 +40,9 @@ public class SetupActivity extends Activity {
     private LinearLayout helpBox;
     private TextView btnHelpToggle, btnGithub;
     private boolean checking = false;
+
+    /** true = صفحه با ویجت برنامه‌ای ساخته شده (نه XML) */
+    private boolean builtFallback = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,71 +53,62 @@ public class SetupActivity extends Activity {
             Ui.init(getApplicationContext());
             setContentView(R.layout.activity_setup);
         } catch (Throwable t) {
-            // اگر لی‌اوت شکست خورد، بدون استایل ادامه بده — اتصال به پنل مهم‌تر است
-            setContentView(R.layout.activity_setup);
+            // اگر لی‌اوت روی این دستگاه شکست خورد، صفحه را کاملاً برنامه‌ای بساز.
+            // (هرگز همان setContentView را دوباره صدا نزن — همان کار، همان خطا)
+            buildFallbackUi();
         }
 
-        inputUrl = findViewById(R.id.inputUrl);
-        btnConnect = findViewById(R.id.btnConnect);
-        btnSkip = findViewById(R.id.btnSkip);
-        progress = findViewById(R.id.checkProgress);
-        status = findViewById(R.id.checkStatus);
-        helpBox = findViewById(R.id.helpBox);
-        btnHelpToggle = findViewById(R.id.btnHelpToggle);
-        btnGithub = findViewById(R.id.btnGithub);
+        if (!builtFallback) {
+            inputUrl = findViewById(R.id.inputUrl);
+            btnConnect = findViewById(R.id.btnConnect);
+            btnSkip = findViewById(R.id.btnSkip);
+            progress = findViewById(R.id.checkProgress);
+            status = findViewById(R.id.checkStatus);
+            helpBox = findViewById(R.id.helpBox);
+            btnHelpToggle = findViewById(R.id.btnHelpToggle);
+            btnGithub = findViewById(R.id.btnGithub);
 
-        // برندینگ به سبک سایت — تزئینی است؛ شکستش هرگز اپ را نبندد
-        try {
-            // پس‌زمینهٔ سایت — همان login-card: شیشهٔ تیره با قاب و گوشهٔ بریده
-            View card = findViewById(R.id.card);
-            card.setBackground(Ui.cutDrawable(this, 0xF914120F, Ui.C_BORDER2, 18, 1));
-            // خط تاکیدی نارنجی بالای کارت — مثل login-card::before سایت
-            findViewById(R.id.cardAccent).setBackgroundResource(R.drawable.bg_accent_fire);
+            // برندینگ به سبک سایت — تزئینی است؛ شکستش هرگز اپ را نبندد
+            try {
+                // پس‌زمینهٔ سایت — همان login-card: شیشهٔ تیره با قاب و گوشهٔ بریده
+                View card = findViewById(R.id.card);
+                card.setBackground(Ui.cutDrawable(this, 0xF914120F, Ui.C_BORDER2, 18, 1));
+                // خط تاکیدی نارنجی بالای کارت — مثل login-card::before سایت
+                findViewById(R.id.cardAccent).setBackgroundResource(R.drawable.bg_accent_fire);
 
-            inputUrl.setBackground(Ui.inputDrawable(this, 9));
-            btnConnect.setBackground(Ui.btnDrawable(this, 10));
-            btnSkip.setBackground(Ui.btnGhostDrawable(this, 10));
-            helpBox.setBackground(Ui.cutDrawable(this, 0xF90D0C0A, Ui.C_BORDER, 9, 1));
+                inputUrl.setBackground(Ui.inputDrawable(this, 9));
+                btnConnect.setBackground(Ui.btnDrawable(this, 10));
+                btnSkip.setBackground(Ui.btnGhostDrawable(this, 10));
+                helpBox.setBackground(Ui.cutDrawable(this, 0xF90D0C0A, Ui.C_BORDER, 9, 1));
 
-            // حداکثر پهنای کارت مثل سایت — min(420dp, عرض صفحه) — همان min(420px,100%) لاگین
-            int screenW = getResources().getDisplayMetrics().widthPixels;
-            card.getLayoutParams().width = Math.min(Ui.dp(this, 420), screenW - Ui.dp(this, 28));
+                // حداکثر پهنای کارت مثل سایت — min(420dp, عرض صفحه)
+                int screenW = getResources().getDisplayMetrics().widthPixels;
+                card.getLayoutParams().width = Math.min(Ui.dp(this, 420), screenW - Ui.dp(this, 28));
 
-            // تیتر برند — «Aral TV» با « TV» نارنجی، فونت Orbitron مثل سایت
-            TextView title = findViewById(R.id.title);
-            SpannableString s = SpannableString.valueOf("Aral TV");
-            s.setSpan(new ForegroundColorSpan(Ui.C_FIRE), 5, 8, 0);
-            title.setText(s);
-            title.setLetterSpacing(0.16f);
-            if (Ui.fontDisplay != null) title.setTypeface(Ui.fontDisplay);
+                // تیتر برند — «Aral TV» با « TV» نارنجی، فونت Orbitron مثل سایت
+                TextView title = findViewById(R.id.title);
+                SpannableString s = SpannableString.valueOf("Aral TV");
+                s.setSpan(new ForegroundColorSpan(Ui.C_FIRE), 4, 7, 0);
+                title.setText(s);
+                title.setLetterSpacing(0.16f);
+                if (Ui.fontDisplay != null) title.setTypeface(Ui.fontDisplay);
 
-            TextView mono = findViewById(R.id.monoFooter);
-            if (Ui.fontMono != null) mono.setTypeface(Ui.fontMono);
-            TextView example = findViewById(R.id.urlExample);
-            if (Ui.fontMono != null) example.setTypeface(Ui.fontMono);
+                TextView mono = findViewById(R.id.monoFooter);
+                if (Ui.fontMono != null) mono.setTypeface(Ui.fontMono);
+                TextView example = findViewById(R.id.urlExample);
+                if (Ui.fontMono != null) example.setTypeface(Ui.fontMono);
 
-            Ui.applyFonts(findViewById(R.id.root));
-        } catch (Throwable ignored) {}
+                Ui.applyFonts(findViewById(R.id.root));
+            } catch (Throwable ignored) {}
+        }
 
         SharedPreferences prefs = getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE);
         String existing = prefs.getString(MainActivity.KEY_URL, null);
         if (existing != null && !existing.trim().isEmpty()) {
             inputUrl.setText(existing);
-        } else {
+        } else if (inputUrl != null) {
             inputUrl.requestFocus();
         }
-
-        if (getIntent() != null && getIntent().getBooleanExtra(EXTRA_SAFE, false)) {
-            showStatus(getString(R.string.safe_mode_notice), 0xFFFFB020);
-        }
-
-        // کلید «Go» کیبورد هم اتصال را اجرا کند
-        inputUrl.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override public boolean onEditorAction(TextView v, int actionId, android.view.KeyEvent event) {
-                connect();
-                return true;
-            }
-        });
 
         btnConnect.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { connect(); }
@@ -128,7 +123,9 @@ public class SetupActivity extends Activity {
 
         btnHelpToggle.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                helpBox.setVisibility(helpBox.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                if (helpBox != null) {
+                    helpBox.setVisibility(helpBox.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                }
             }
         });
 
@@ -140,6 +137,131 @@ public class SetupActivity extends Activity {
                 } catch (Exception ignored) {}
             }
         });
+    }
+
+    /* =====================================================================
+       صفحهٔ اتصالِ بدون XML — دو لایه:
+       ۱) ویجت‌های خالص با همان متن‌ها و رنگ‌های سایت (بدون فونت/drawable)
+       ۲) اگر باز هم نشد: فقط ورودی و دکمه‌ها — مهم این است که اپ باز بماند
+       ===================================================================== */
+    private void buildFallbackUi() {
+        try {
+            builtFallback = true;
+
+            LinearLayout box = new LinearLayout(this);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            box.setPadding(Ui.dp(this, 24), Ui.dp(this, 56), Ui.dp(this, 24), Ui.dp(this, 48));
+            box.setBackgroundColor(0xFF070707);
+
+            TextView title = new TextView(this);
+            title.setText("Aral TV");
+            title.setTextColor(0xFFFF4D00);
+            title.setTextSize(28);
+            title.setPadding(0, 0, 0, Ui.dp(this, 4));
+
+            TextView sub = new TextView(this);
+            sub.setText(getString(R.string.setup_sub));
+            sub.setTextColor(0xFF8F8A83);
+            sub.setTextSize(13);
+            sub.setPadding(0, 0, 0, Ui.dp(this, 22));
+
+            inputUrl = new EditText(this);
+            inputUrl.setHint(getString(R.string.setup_url_hint));
+            inputUrl.setSingleLine(true);
+            inputUrl.setTextColor(0xFFE8E6E1);
+            inputUrl.setHintTextColor(0xFF57534C);
+            inputUrl.setTextSize(14);
+
+            btnConnect = new Button(this);
+            btnConnect.setText(R.string.setup_connect);
+            btnConnect.setTextColor(0xFF120500);
+
+            btnSkip = new Button(this);
+            btnSkip.setText(R.string.setup_skip);
+            btnSkip.setTextColor(0xFF8F8A83);
+
+            progress = new ProgressBar(this);
+            progress.setVisibility(View.GONE);
+
+            status = new TextView(this);
+            status.setVisibility(View.GONE);
+            status.setTextSize(12.5f);
+            status.setTextColor(0xFF8F8A83);
+            status.setGravity(android.view.Gravity.CENTER);
+
+            helpBox = new LinearLayout(this);
+            helpBox.setOrientation(LinearLayout.VERTICAL);
+            helpBox.setVisibility(View.GONE);
+
+            btnHelpToggle = new TextView(this);
+            btnHelpToggle.setText(getString(R.string.setup_help_title));
+            btnHelpToggle.setTextColor(0xFF8F8A83);
+            btnHelpToggle.setTextSize(12.5f);
+            btnHelpToggle.setPadding(0, Ui.dp(this, 16), 0, Ui.dp(this, 6));
+
+            btnGithub = new TextView(this);
+            btnGithub.setText(getString(R.string.setup_help_link));
+            btnGithub.setTextColor(0xFFFF4D00);
+            btnGithub.setTextSize(12.5f);
+            btnGithub.setPadding(0, Ui.dp(this, 6), 0, Ui.dp(this, 6));
+
+            box.addView(title);
+            box.addView(sub);
+            box.addView(inputUrl, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            box.addView(btnConnect, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            box.addView(btnSkip, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            box.addView(progress, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            box.addView(status, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            box.addView(btnHelpToggle);
+            box.addView(helpBox);
+            box.addView(btnGithub);
+
+            setContentView(new android.widget.ScrollView(this) {{
+                addView(box, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+                setFillViewport(true);
+            }});
+        } catch (Throwable fatal) {
+            // لایهٔ آخر — بدون هیچ چیز تزئینی، فقط ورودی و دکمه‌ها
+            try {
+                LinearLayout box = new LinearLayout(this);
+                box.setOrientation(LinearLayout.VERTICAL);
+                box.setBackgroundColor(0xFF070707);
+                box.setPadding(24, 64, 24, 48);
+
+                inputUrl = new EditText(this);
+                btnConnect = new Button(this);
+                btnConnect.setText(R.string.setup_connect);
+                btnSkip = new Button(this);
+                btnSkip.setText(R.string.setup_skip);
+                progress = new ProgressBar(this);
+                progress.setVisibility(View.GONE);
+                status = new TextView(this);
+                status.setVisibility(View.GONE);
+                helpBox = new LinearLayout(this);
+                helpBox.setVisibility(View.GONE);
+                btnHelpToggle = new TextView(this);
+                btnGithub = new TextView(this);
+
+                box.addView(inputUrl, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                box.addView(btnConnect, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                box.addView(btnSkip, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                box.addView(progress);
+                box.addView(status);
+                box.addView(btnHelpToggle);
+                box.addView(helpBox);
+                box.addView(btnGithub);
+                setContentView(box);
+            } catch (Throwable ignored) {}
+        }
     }
 
     /** نرمال‌سازی آدرس: افزودن https، حذف اسلش انتهایی */
@@ -236,18 +358,22 @@ public class SetupActivity extends Activity {
     }
 
     private void saveAndGo(String url) {
-        getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE)
-                .edit()
-                .putString(MainActivity.KEY_URL, url)
-                .putInt(BootGuard.KEY_FAILS, 0)
-                .commit();
-        Intent i = new Intent(this, MainActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(i);
-        finish();
+        try {
+            getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE)
+                    .edit()
+                    .putString(MainActivity.KEY_URL, url)
+                    .apply();
+            Intent i = new Intent(this, MainActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(i);
+            finish();
+        } catch (Throwable t) {
+            showStatus(getString(R.string.setup_error_unreachable), 0xFFF36D6D);
+        }
     }
 
     private void showStatus(String msg, int color) {
+        if (status == null) return;
         status.setVisibility(View.VISIBLE);
         status.setTextColor(color);
         status.setText(msg);
@@ -257,7 +383,7 @@ public class SetupActivity extends Activity {
         try {
             android.view.inputmethod.InputMethodManager imm =
                     (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-            if (imm != null) imm.hideSoftInputFromWindow(inputUrl.getWindowToken(), 0);
+            if (imm != null && inputUrl != null) imm.hideSoftInputFromWindow(inputUrl.getWindowToken(), 0);
         } catch (Exception ignored) {}
     }
 }

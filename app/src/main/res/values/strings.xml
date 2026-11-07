@@ -22,7 +22,6 @@
     <string name="setup_help_2">۲. یک Secret با نام PASSWORD بسازید (رمز ورود پنل).</string>
     <string name="setup_help_3">۳. کد worker.js از مخزن گیت‌هاب را در ویرایشگر ورکر جای‌گذاری و Deploy کنید.</string>
     <string name="setup_help_link">مشاهده راهنمای کامل در گیت‌هاب ←</string>
-    <string name="safe_mode_notice">اجرای قبلی برنامه با خطا بسته شد. آدرس پنل را بررسی کنید و دوباره «اتصال و ورود» را بزنید.</string>
     <string name="setup_note">اطلاعات ورود شما فقط روی همین گوشی ذخیره می‌شود.</string>
 
     <!-- اپ اصلی -->
@@ -40,4 +39,6 @@
     <string name="error_sub">اینترنت یا آدرس پنل را بررسی کنید</string>
     <string name="error_retry">تلاش دوباره</string>
     <string name="error_change">تغییر آدرس پنل</string>
+    <string name="error_renderer_title">نمایش پنل در اپ ممکن نشد</string>
+    <string name="error_open_browser">بازکردن در مرورگر</string>
 </resources>
