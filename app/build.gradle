@@ -1,0 +1,45 @@
+// Aral TV Android — ماژول اپ
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.araldev.araltv'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.araldev.araltv"
+        minSdk 24
+        targetSdk 34
+        versionCode 10702
+        versionName "1.7.2"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("../keystore/araltv-release.jks")
+            storePassword "araltv2024"
+            keyAlias "araltv"
+            keyPassword "araltv2024"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+// بدون هیچ وابستگی خارجی — فقط فریم‌ورک اندروید
+dependencies {
+}

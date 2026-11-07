@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- پالت دیزاین‌سیستم خود سایت Aral TV v1.7 (تم دارک). نام هر رنگ همان متغیر CSS سایت است. -->
+<resources>
+    <color name="bg">#070707</color>
+    <color name="fire">#FF4D00</color>
+    <color name="fire_2">#FF6A26</color>
+    <color name="fire_ink">#120500</color>
+    <color name="neon">#00FF9D</color>
+    <color name="text_primary">#E8E6E1</color>
+    <color name="text_secondary">#8F8A83</color>
+    <color name="dim">#57534C</color>
+    <color name="border">#1D1C1A</color>
+    <color name="border2">#2E2D2B</color>
+
+    <!-- زمینهٔ آیکون اداپتیو: همان مشکی آیکون PWA سایت -->
+    <color name="ic_launcher_bg">#070707</color>
+</resources>

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.araldev.araltv"
+    android:versionCode="10702"
+    android:versionName="1.7.2">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        android:theme="@style/Theme.AralTV">
+
+        <!-- اسپلش — نقطه ورود -->
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.AralTV.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- تنظیم آدرس پنل -->
+        <activity
+            android:name=".SetupActivity"
+            android:exported="false"
+            android:label="@string/setup_title"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:theme="@style/Theme.AralTV" />
+
+        <!-- اپ اصلی -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection"
+            android:theme="@style/Theme.AralTV">
+
+            <!-- اشتراک‌گذاری لینک ویدیو از سایر اپ‌ها -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+
+            <!-- باز کردن مستقیم لینک‌های یوتیوب -->
+            <intent-filter android:priority="10">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" android:host="youtu.be" />
+                <data android:scheme="https" android:host="youtu.be" />
+                <data android:scheme="http" android:host="youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="http" android:host="youtube.com" android:pathPrefix="/shorts/" />
+                <data android:scheme="https" android:host="youtube.com" android:pathPrefix="/shorts/" />
+                <data android:scheme="http" android:host="youtube.com" android:pathPrefix="/live/" />
+                <data android:scheme="https" android:host="youtube.com" android:pathPrefix="/live/" />
+                <data android:scheme="http" android:host="youtube.com" android:pathPrefix="/embed/" />
+                <data android:scheme="https" android:host="youtube.com" android:pathPrefix="/embed/" />
+                <data android:scheme="http" android:host="youtube.com" android:pathPrefix="/channel/" />
+                <data android:scheme="https" android:host="youtube.com" android:pathPrefix="/channel/" />
+                <data android:scheme="http" android:host="youtube.com" android:pathPrefix="/v/" />
+                <data android:scheme="https" android:host="youtube.com" android:pathPrefix="/v/" />
+                <data android:scheme="http" android:host="m.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="m.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="http" android:host="m.youtube.com" android:pathPrefix="/shorts/" />
+                <data android:scheme="https" android:host="m.youtube.com" android:pathPrefix="/shorts/" />
+                <data android:scheme="http" android:host="m.youtube.com" android:pathPrefix="/live/" />
+                <data android:scheme="https" android:host="m.youtube.com" android:pathPrefix="/live/" />
+                <data android:scheme="http" android:host="music.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="music.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="http" android:host="www.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="www.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="http" android:host="www.youtube.com" android:pathPrefix="/shorts/" />
+                <data android:scheme="https" android:host="www.youtube.com" android:pathPrefix="/shorts/" />
+                <data android:scheme="http" android:host="www.youtube.com" android:pathPrefix="/live/" />
+                <data android:scheme="https" android:host="www.youtube.com" android:pathPrefix="/live/" />
+                <data android:scheme="http" android:host="www.youtube.com" android:pathPrefix="/channel/" />
+                <data android:scheme="https" android:host="www.youtube.com" android:pathPrefix="/channel/" />
+            </intent-filter>
+
+            <!-- باز کردن مستقیم لینک‌های آپارات -->
+            <intent-filter android:priority="10">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" android:host="aparat.com" android:pathPrefix="/v/" />
+                <data android:scheme="https" android:host="aparat.com" android:pathPrefix="/v/" />
+                <data android:scheme="http" android:host="www.aparat.com" android:pathPrefix="/v/" />
+                <data android:scheme="https" android:host="www.aparat.com" android:pathPrefix="/v/" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

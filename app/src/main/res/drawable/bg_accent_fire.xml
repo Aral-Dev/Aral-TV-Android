@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خط تاکیدی بالای کارت — مثل login-card::before سایت:
+     fire سمت راست ← محو به شفاف سمت چپ -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="0"
+        android:startColor="#00FF4D00"
+        android:endColor="#FFFF4D00" />
+</shape>

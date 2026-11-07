@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صفحهٔ اتصال به پنل — همان زبان طراحی صفحهٔ ورود سایت:
+     مشکی + لکه‌های fire/neon، کارت شیشه‌ای با گوشهٔ بریدهٔ ARAL،
+     لوگوی PWA سایت، تیتر Orbitron، دکمهٔ fire، فوتر مونو -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <com.araldev.araltv.BlobsView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingLeft="14dp"
+            android:paddingTop="24dp"
+            android:paddingRight="14dp"
+            android:paddingBottom="56dp">
+
+            <!-- کارت ورود — مثل .login-card سایت -->
+            <LinearLayout
+                android:id="@+id/card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingLeft="26dp"
+                android:paddingTop="30dp"
+                android:paddingRight="26dp"
+                android:paddingBottom="24dp">
+
+                <!-- خط تاکیدی بالای کارت — مثل login-card::before سایت -->
+                <View
+                    android:id="@+id/cardAccent"
+                    android:layout_width="96dp"
+                    android:layout_height="3dp"
+                    android:layout_gravity="left"
+                    android:layout_marginBottom="20dp" />
+
+                <ImageView
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:layout_gravity="center_horizontal"
+                    android:contentDescription="Aral TV"
+                    android:src="@drawable/logo" />
+
+                <TextView
+                    android:id="@+id/title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="12dp"
+                    android:text="Aral TV"
+                    android:textColor="@color/text_primary"
+                    android:textSize="30sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="22dp"
+                    android:text="@string/setup_sub"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <!-- آدرس پنل -->
+                <EditText
+                    android:id="@+id/inputUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/setup_url_hint"
+                    android:imeOptions="actionGo"
+                    android:inputType="textUri"
+                    android:layoutDirection="ltr"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="12dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="12dp"
+                    android:singleLine="true"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/dim"
+                    android:textDirection="ltr"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/urlExample"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:letterSpacing="0.08"
+                    android:text="@string/setup_url_example"
+                    android:textColor="@color/dim"
+                    android:textSize="10sp" />
+
+                <Button
+                    android:id="@+id/btnConnect"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/setup_connect"
+                    android:textColor="@color/fire_ink"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <ProgressBar
+                    android:id="@+id/checkProgress"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="12dp"
+                    android:indeterminateTint="@color/fire"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/checkStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center"
+                    android:textSize="12.5sp"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/btnSkip"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/setup_skip"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:visibility="visible" />
+
+                <!-- راهنما -->
+                <TextView
+                    android:id="@+id/btnHelpToggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="18dp"
+                    android:padding="6dp"
+                    android:text="@string/setup_help_title"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12.5sp" />
+
+                <LinearLayout
+                    android:id="@+id/helpBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical"
+                    android:padding="14dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingExtra="4dp"
+                        android:text="@string/setup_help_1"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:lineSpacingExtra="4dp"
+                        android:text="@string/setup_help_2"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:lineSpacingExtra="4dp"
+                        android:text="@string/setup_help_3"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnGithub"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:padding="6dp"
+                        android:text="@string/setup_help_link"
+                        android:textColor="@color/fire"
+                        android:textSize="12.5sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/setup_note"
+                        android:textColor="@color/dim"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- فوتر مونو — مثل login-footer سایت -->
+    <TextView
+        android:id="@+id/monoFooter"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="18dp"
+        android:letterSpacing="0.2"
+        android:text="ARAL TV · ANDROID · V1.7.0"
+        android:textColor="@color/dim"
+        android:textSize="10.5sp" />
+</FrameLayout>
